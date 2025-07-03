@@ -11,10 +11,9 @@ A modern web based, All in One security Reseacher Toolkit for subdomain reconnai
 - **Subdomain Analysis**
   - Fast, concurrent probing of subdomains (configurable RPS)
   - Deep crawl for endpoint discovery, Technology detection (Wappalyzer integration)
-  - Port scanning (optional)
-  - Human-readable, downloadable reports for each subdomain
+  - Port scanning (Top 100)
+  - Human-readable, downloadable reports for each subdomain zip file
   - Real-time progress and results via WebSocket
-  - Pause/resume support for long-running jobs
   - Modern, responsive web UI (no build step required)
   - AI-powered passive and active scan suggestions (add in future)
 
@@ -28,11 +27,18 @@ A modern web based, All in One security Reseacher Toolkit for subdomain reconnai
 2. **Setup and build:**
    ```sh
    cd backend
+   go mod init vuln-ai-backend
+   go mod tidy
+   go run main.go
+   ```
+OR   
+   ```
+   cd backend
+   go mod init vuln-ai-backend
    go mod tidy
    go build -o vuln-ai-backend
-   ```
-3. **Run the backend:**
-   ```sh
+   
+   #run command
    ./vuln-ai-backend
    ```
 
