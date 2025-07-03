@@ -1,6 +1,8 @@
 # VULN_AI
 
-A modern, AI-powered security analys is platform for subdomain reconnaissance and attack surface discovery.
+> *_🚧Project under active development_*
+---
+A modern web based, All in One security Reseacher Toolkit for subdomain reconnaissance and attack surface discovery.
 
 ---
 
