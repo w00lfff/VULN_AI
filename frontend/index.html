@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VULN_AI - Modular Analysis Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0a0a0f; color: #e0e0e0; overflow-x: hidden; }
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        .glass-card { background: rgba(10, 10, 15, 0.7); backdrop-filter: blur(15px) saturate(180%); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; }
+        .module-card { transition: all 0.3s ease; cursor: pointer; }
+        .module-card:hover { transform: translateY(-5px) scale(1.02); border-color: rgba(79, 70, 229, 0.8); box-shadow: 0 0 30px rgba(79, 70, 229, 0.3); }
+        .sensitive-button { background: linear-gradient(90deg, #4f46e5, #c026d3); transition: all 0.3s ease; box-shadow: 0 0 15px rgba(79, 70, 229, 0.5); }
+        .sensitive-button:hover { transform: translateY(-2px); box-shadow: 0 0 25px rgba(79, 70, 229, 0.8); }
+        .result-table th, .result-table td { padding: 0.75rem 1rem; text-align: left; vertical-align: top; }
+        .result-table th { background-color: rgba(255, 255, 255, 0.05); }
+        .result-table tr { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .loader { border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: #4f46e5; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .priority-high { color: #ef4444; font-weight: bold; } .priority-medium { color: #f97316; font-weight: bold; } .priority-low { color: #84cc16; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 50; }
+        .progress-bar-container { background-color: rgba(255,255,255,0.1); border-radius: 9999px; overflow: hidden; }
+        .progress-bar { background: linear-gradient(90deg, #4f46e5, #c026d3); height: 100%; transition: width 0.3s ease-in-out; }
+        .input-field { background-color: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); border-radius: 0.5rem; padding: 0.5rem; }
+        .file-drop-zone { border: 2px dashed rgba(255, 255, 255, 0.2); transition: all 0.3s ease; }
+        .file-drop-zone.dragover { border-color: #4f46e5; background-color: rgba(79, 70, 229, 0.1); }
+        .toggle-bg:after { content: ''; position: absolute; top: 2px; left: 2px; background: white; width: 1.25rem; height: 1.25rem; border-radius: 50%; transition: 0.3s; }
+        input:checked + .toggle-bg:after { transform: translateX(100%); } input:checked + .toggle-bg { background-color: #4f46e5; }
+
+        /* Custom Slider Styles */
+        input[type=range].requests-per-second {
+            -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer;
+        }
+        input[type=range].requests-per-second::-webkit-slider-runnable-track {
+            background: #374151; height: 0.5rem; border-radius: 0.5rem;
+        }
+        input[type=range].requests-per-second::-moz-range-track {
+            background: #374151; height: 0.5rem; border-radius: 0.5rem;
+        }
+        input[type=range].requests-per-second::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            margin-top: -6px; /* Vertically center */
+            background-color: #6366f1; /* indigo-500 */
+            height: 1.25rem; width: 1.25rem;
+            border-radius: 50%;
+            border: 2px solid #0a0a0f;
+            transition: background-color 0.2s ease-in-out;
+        }
+        input[type=range].requests-per-second::-moz-range-thumb {
+            border: none; background-color: #6366f1; height: 1.25rem; width: 1.25rem; border-radius: 50%;
+            border: 2px solid #0a0a0f;
+            transition: background-color 0.2s ease-in-out;
+        }
+        input[type=range].requests-per-second:hover::-webkit-slider-thumb,
+        input[type=range].requests-per-second:hover::-moz-range-thumb {
+            background-color: #818cf8; /* indigo-400 */
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <canvas id="bg-canvas"></canvas>
+    <div id="app-container" class="relative min-h-screen w-full flex flex-col items-center p-4 sm:p-6 lg:p-8">
+        <div id="top-bar" class="w-full max-w-7xl mx-auto hidden h-16">
+             <button id="exit-button" class="absolute top-8 left-8 text-red-500 hover:text-red-400 font-bold transition-colors">&larr; Exit to Modules</button>
+        </div>
+        <div id="view-modules" class="w-full flex flex-col items-center justify-center flex-grow">
+            <header class="text-center mb-12"><h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tighter text-white">VULN_<span class="text-indigo-400">AI</span></h1><p class="text-lg text-gray-400 mt-2">Your AI-Powered Security Analysis Platform</p></header>
+            <main class="w-full max-w-4xl mx-auto"><div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div id="select-module-subdomain" class="glass-card module-card p-6 flex flex-col justify-between"><div><h3 class="text-xl font-bold text-indigo-300">Subdomain Analysis</h3><p class="mt-2 text-gray-400 text-sm">Probe, crawl, and scan subdomains to uncover attack surfaces.</p></div><div class="mt-6 text-right font-semibold text-indigo-400">Select &rarr;</div></div>
+                <div id="select-module-url" class="glass-card module-card p-6 flex flex-col justify-between"><div><h3 class="text-xl font-bold text-teal-300">URL Analysis</h3><p class="mt-2 text-gray-400 text-sm">Analyze URLs to find sensitive endpoints and exposed functionality.</p></div><div class="mt-6 text-right font-semibold text-teal-400">Select &rarr;</div></div>
+            </main>
+        </div>
+        <div id="view-analyzer" class="hidden w-full"></div>
+    </div>
+    <div id="generic-modal" class="modal-overlay hidden"><div class="glass-card w-11/12 md:w-2/3 lg:w-1/2 p-6 rounded-lg max-h-[80vh] overflow-y-auto"><div class="flex justify-between items-center mb-4"><h3 id="modal-title" class="text-2xl font-bold">Details</h3><button id="close-modal-button" class="text-2xl text-gray-400 hover:text-white">&times;</button></div><div id="modal-body" class="bg-gray-900/50 p-4 rounded-md text-gray-300 font-mono text-sm whitespace-pre-wrap"></div></div></div>
+
+    <script type="module">
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        const particlesGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(5000 * 3);
+        for (let i = 0; i < positions.length; i++) { positions[i] = (Math.random() - 0.5) * 15; }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ color: 0x4f46e5, size: 0.015, transparent: true, blending: THREE.AdditiveBlending });
+        const particleSystem = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particleSystem);
+        camera.position.z = 5;
+        const animate = () => { requestAnimationFrame(animate); particleSystem.rotation.y += 0.0002; renderer.render(scene, camera); };
+        animate();
+
+        const viewModules = document.getElementById('view-modules');
+        const viewAnalyzer = document.getElementById('view-analyzer');
+        const topBar = document.getElementById('top-bar');
+        const genericModal = document.getElementById('generic-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+
+        document.getElementById('select-module-subdomain').addEventListener('click', () => showModule('subdomain'));
+        document.getElementById('select-module-url').addEventListener('click', () => showModule('url'));
+        document.getElementById('close-modal-button').addEventListener('click', () => genericModal.classList.add('hidden'));
+        document.getElementById('exit-button').addEventListener('click', () => {
+            sessionStorage.removeItem('currentView');
+            sessionStorage.removeItem('currentResults');
+            showView('modules');
+        });
+
+        function showView(view) {
+            viewModules.classList.toggle('hidden', view !== 'modules');
+            viewAnalyzer.classList.toggle('hidden', view === 'modules');
+            topBar.classList.toggle('hidden', view === 'modules');
+        }
+
+        function showModal(title, content) {
+            modalTitle.textContent = title;
+            modalBody.textContent = content; // Use textContent for safety
+            genericModal.classList.remove('hidden');
+        }
+
+        const modules = {
+            subdomain: {
+                title: 'Subdomain Analysis',
+                endpoint: 'subdomains/analyze',
+                template: `
+                    <header class="text-center mb-8"><h1 class="text-4xl sm:text-5xl font-black text-white">Subdomain Analysis</h1></header>
+                    <button class="back-to-modules text-indigo-400 hover:text-indigo-200 font-bold mb-4">&larr; Back to Modules</button>
+                    <main class="w-full max-w-7xl mx-auto">
+                        <div class="input-section glass-card p-6 sm:p-8">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div><div class="file-drop-zone h-full rounded-lg p-8 text-center cursor-pointer flex flex-col items-center justify-center"><input type="file" class="file-input hidden" accept=".txt"><svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4V12a4 4 0 014-4h12l4 4h12a4 4 0 014 4z" stroke-width="2"/></svg><p class="mt-2"><span class="font-semibold text-indigo-400">Upload file</span></p><p class="file-name-display mt-2 text-sm text-green-400"></p></div></div>
+                                <div><textarea class="manual-input w-full bg-gray-900/50 border border-gray-700 rounded-lg p-4" rows="8" placeholder="Or enter subdomains..."></textarea></div>
+                            </div>
+                            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div><label class="block text-sm mb-2">AI Provider</label><select class="ai-provider input-field w-full"><option value="google">Google AI</option><option value="openai">OpenAI</option></select></div>
+                                <div><label class="block text-sm mb-2">API Key</label><input type="password" class="api-key input-field w-full" placeholder="Optional"></div>
+                            </div>
+                            <div class="mt-6 flex justify-center items-center space-x-8">
+                                <label class="flex items-center cursor-pointer"><div class="relative"><input type="checkbox" class="deep-crawl-toggle sr-only"><div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div></div><div class="ml-3">Deep Crawl</div></label>
+                                <label class="flex items-center cursor-pointer"><div class="relative"><input type="checkbox" class="port-scan-toggle sr-only"><div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div></div><div class="ml-3">Port Scan</div></label>
+                            </div>
+                            <div class="mt-8 bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                                <label for="requests-per-second" class="block text-sm font-medium text-center text-gray-300">Requests Per Second</label>
+                                <div class="flex items-center gap-4 mt-2">
+                                    <input type="range" id="requests-per-second" class="requests-per-second w-full" min="1" max="100" value="10" oninput="document.getElementById('rps-output').textContent = this.value">
+                                    <span id="rps-output" class="font-mono text-lg text-indigo-400 bg-gray-800 px-3 py-1 rounded-md w-16 text-center">10</span>
+                                </div>
+                            </div>
+                            <div class="mt-8 text-center"><button class="analyze-button sensitive-button text-white font-bold py-3 px-12 rounded-full text-lg">Analyze</button></div>
+                        </div>
+                        <div class="loading-section hidden text-center py-12 w-full max-w-2xl mx-auto"></div>
+                        <div class="results-section hidden mt-12">
+                            <div class="flex flex-wrap gap-4 justify-end mb-4">
+                                <button class="export-reachable-btn glass-card bg-gradient-to-r from-green-400/80 to-blue-500/80 hover:from-blue-500/90 hover:to-green-400/90 text-white font-bold py-2 px-6 rounded-full shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-300 active:scale-95">Export Reachable Subdomains</button>
+                                <button class="export-results-btn glass-card bg-gradient-to-r from-pink-400/80 to-indigo-500/80 hover:from-indigo-500/90 hover:to-pink-400/90 text-white font-bold py-2 px-6 rounded-full shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-pink-300 active:scale-95">Export Full Reports</button>
+                            </div>
+                            <div class="glass-card overflow-x-auto"><table class="w-full result-table"><thead><tr><th>Subdomain</th><th>Status</th><th>Priority</th><th>Preview</th><th>AI Actions</th></tr></thead><tbody class="results-body"></tbody></table></div>
+                        </div>
+                    </main>`
+            },
+            url: {
+                title: 'URL Analysis',
+                endpoint: 'urls/analyze',
+                template: `
+                    <header class="text-center mb-8"><h1 class="text-4xl sm:text-5xl font-black text-white">URL Analysis</h1></header>
+                    <button class="back-to-modules text-teal-400 hover:text-teal-200 font-bold mb-4">&larr; Back to Modules</button>
+                    <main class="w-full max-w-6xl mx-auto">
+                        <div class="input-section glass-card p-6 sm:p-8">
+                             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div><div class="file-drop-zone h-full rounded-lg p-8 text-center cursor-pointer flex flex-col items-center justify-center"><input type="file" class="file-input hidden" accept=".txt"><svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4V12a4 4 0 014-4h12l4 4h12a4 4 0 014 4z" stroke-width="2"/></svg><p class="mt-2"><span class="font-semibold text-teal-400">Upload file</span></p><p class="file-name-display mt-2 text-sm text-green-400"></p></div></div>
+                                <div><textarea class="manual-input w-full bg-gray-900/50 border border-gray-700 rounded-lg p-4" rows="8" placeholder="Or enter full URLs..."></textarea></div>
+                            </div>
+                            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div><label class="block text-sm mb-2">AI Provider</label><select class="ai-provider input-field w-full"><option value="google">Google AI</option><option value="openai">OpenAI</option></select></div>
+                                <div><label class="block text-sm mb-2">API Key</label><input type="password" class="api-key input-field w-full" placeholder="Required for AI analysis"></div>
+                            </div>
+                            <div class="mt-8 text-center"><button class="analyze-button sensitive-button text-white font-bold py-3 px-12 rounded-full text-lg">Analyze</button></div>
+                        </div>
+                        <div class="loading-section hidden text-center py-12 w-full max-w-2xl mx-auto"></div>
+                        <div class="results-section hidden mt-12">
+                            <div class="glass-card overflow-x-auto"><table class="w-full result-table"><thead><tr><th>URL</th><th>Status</th><th>Priority</th><th>AI Actions</th></tr></thead><tbody class="results-body"></tbody></table></div>
+                        </div>
+                    </main>`
+            }
+        };
+
+        function showModule(moduleName) {
+            const module = modules[moduleName];
+            viewAnalyzer.innerHTML = module.template;
+            sessionStorage.setItem('currentView', moduleName);
+            showView('analyzer');
+            
+            const instance = new ModuleInstance(moduleName, module.endpoint);
+            instance.init();
+        }
+
+        class ModuleInstance {
+            constructor(name, endpoint) {
+                this.name = name;
+                this.endpoint = endpoint;
+                this.root = document.getElementById('view-analyzer');
+                this.analysisResults = [];
+                this.fileForUpload = null;
+            }
+
+            init() {
+                this.inputSection = this.root.querySelector('.input-section');
+                this.loadingSection = this.root.querySelector('.loading-section');
+                this.resultsSection = this.root.querySelector('.results-section');
+                this.resultsBody = this.root.querySelector('.results-body');
+                this.analyzeButton = this.root.querySelector('.analyze-button');
+                this.fileDropZone = this.root.querySelector('.file-drop-zone');
+                this.fileInput = this.root.querySelector('.file-input');
+                this.fileNameDisplay = this.root.querySelector('.file-name-display');
+                this.manualInput = this.root.querySelector('.manual-input');
+
+                this.root.querySelector('.back-to-modules').addEventListener('click', () => {
+                    sessionStorage.removeItem('currentView');
+                    sessionStorage.removeItem('currentResults');
+                    showView('modules');
+                });
+                this.analyzeButton.addEventListener('click', () => this.analyze());
+                this.resultsBody.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('preview-report-btn')) {
+                        const index = e.target.dataset.index;
+                        const result = this.analysisResults[index];
+                        showModal(`Subdomain Report: ${result.Subdomain || result.URL}`, result.Report);
+                        return;
+                    }
+                    this.handleResultClick(e);
+                });
+                this.fileDropZone.addEventListener('click', () => this.fileInput.click());
+                this.fileDropZone.addEventListener('dragover', (e) => { e.preventDefault(); this.fileDropZone.classList.add('dragover'); });
+                this.fileDropZone.addEventListener('dragleave', () => this.fileDropZone.classList.remove('dragover'));
+                this.fileDropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.fileDropZone.classList.remove('dragover');
+                    if (e.dataTransfer.files.length > 0) this.handleFile(e.dataTransfer.files[0]);
+                });
+                this.fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) this.handleFile(e.target.files[0]); });
+
+                if (this.name === 'subdomain') {
+                    this.root.querySelector('.export-results-btn').addEventListener('click', () => this.exportResults());
+                    this.root.querySelector('.export-reachable-btn').addEventListener('click', () => this.exportReachable());
+                }
+            }
+
+            handleFile(file) {
+                this.fileNameDisplay.textContent = `Selected: ${file.name}`;
+                this.fileForUpload = file;
+            }
+
+            async analyze() {
+                const manualInputText = this.manualInput.value.split('\n').map(l => l.trim()).filter(Boolean);
+                if (manualInputText.length === 0 && !this.fileForUpload) {
+                    return alert('Please provide input via file or text area.');
+                }
+
+                this.inputSection.classList.add('hidden');
+                this.resultsSection.classList.add('hidden');
+                this.loadingSection.classList.remove('hidden');
+                this.analyzeButton.disabled = true;
+
+                try {
+                    const formData = new FormData();
+                    if (this.fileForUpload) {
+                        formData.append('file', this.fileForUpload);
+                    }
+                    
+                    const payload = {
+                        aiProvider: this.root.querySelector('.ai-provider').value,
+                        apiKey: this.root.querySelector('.api-key').value,
+                    };
+
+                    if (this.name === 'subdomain') {
+                        payload.subdomains = manualInputText;
+                        payload.isDeepCrawl = this.root.querySelector('.deep-crawl-toggle')?.checked;
+                        payload.isPortScan = this.root.querySelector('.port-scan-toggle')?.checked;
+                        payload.requestsPerSecond = this.root.querySelector('.requests-per-second')?.value || '10';
+                    } else {
+                        payload.urls = manualInputText;
+                    }
+                    
+                    for (const key in payload) {
+                        if (Array.isArray(payload[key])) {
+                            payload[key].forEach(item => formData.append(key+'[]', item));
+                        } else {
+                             formData.append(key, payload[key]);
+                        }
+                    }
+
+                    const jobResponse = await fetch(`http://localhost:8080/api/v1/${this.endpoint}`, {
+                        method: 'POST', body: formData,
+                    });
+
+                    if (!jobResponse.ok) throw new Error((await jobResponse.json()).error || 'Failed to start job');
+                    const { jobID } = await jobResponse.json();
+                    this.connectWebSocket(jobID);
+
+                    this.deepCrawlUsed = payload.isDeepCrawl;
+                    this.jobID = jobID;
+                } catch (error) {
+                    alert(`Analysis failed: ${error.message}`);
+                    this.inputSection.classList.remove('hidden');
+                    this.loadingSection.classList.add('hidden');
+                    this.analyzeButton.disabled = false;
+                }
+            }
+            
+            connectWebSocket(jobID) {
+                this.loadingSection.innerHTML = `<div class=\"loader mx-auto\"></div><p class=\"loading-message mt-4 text-lg text-gray-300 animate-pulse\">Initializing...</p><div class=\"progress-bar-container w-full h-4 mt-4\"><div class=\"progress-bar\" style=\"width: 0%;\"></div></div><p class=\"timer mt-2 text-sm text-gray-400 font-mono\">Elapsed: 0s</p><button class=\"pause-resume-btn mt-6 glass-card shadow-xl transition-all duration-200 flex items-center justify-center gap-2 px-8 py-3 rounded-full text-lg font-bold text-white bg-gradient-to-r from-yellow-400/90 to-yellow-500/90 hover:from-yellow-500/90 hover:to-yellow-400/90 focus:outline-none focus:ring-4 focus:ring-yellow-300 active:scale-95 relative group\" title=\"Pause or resume the job\"><span class=\"pause-icon animate-pulse\">⏸️</span><span class=\"pause-text\">Pause</span><span class=\"absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-xs text-yellow-200 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all\">Pause/Resume</span></button><p class=\"paused-message mt-4 text-pink-400 font-bold hidden\">Paused. Click Resume to continue.</p>`;
+                const progressBar = this.loadingSection.querySelector('.progress-bar');
+                const loadingMessage = this.loadingSection.querySelector('.loading-message');
+                const timer = this.loadingSection.querySelector('.timer');
+                const pauseResumeBtn = this.loadingSection.querySelector('.pause-resume-btn');
+                const pauseIcon = pauseResumeBtn.querySelector('.pause-icon');
+                const pauseText = pauseResumeBtn.querySelector('.pause-text');
+                const pausedMsg = this.loadingSection.querySelector('.paused-message');
+                
+                let seconds = 0;
+                let paused = false;
+                const timerInterval = setInterval(() => { seconds++; timer.textContent = `Elapsed: ${seconds}s`; }, 1000);
+
+                const ws = new WebSocket(`ws://localhost:8080/api/v1/ws/progress/${jobID}`);
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    progressBar.style.width = `${data.progress}%`;
+                    loadingMessage.textContent = data.message;
+                    if (data.isFinal) {
+                        clearInterval(timerInterval);
+                        ws.close();
+                        this.analysisResults = data.results;
+                        sessionStorage.setItem('currentResults', JSON.stringify(this.analysisResults));
+                        this.displayResults();
+                        this.loadingSection.classList.add('hidden');
+                        this.resultsSection.classList.remove('hidden');
+                        this.analyzeButton.disabled = false;
+                    }
+                };
+                ws.onerror = () => { clearInterval(timerInterval); alert("WebSocket connection error."); };
+
+                pauseResumeBtn.addEventListener('click', async () => {
+                    if (!paused) {
+                        await fetch(`http://localhost:8080/api/v1/jobs/${jobID}/pause`, { method: 'POST' });
+                        paused = true;
+                        pauseText.textContent = 'Resume';
+                        pauseIcon.textContent = '▶️';
+                        pauseResumeBtn.classList.remove('from-yellow-400/80', 'to-yellow-500/90');
+                        pauseResumeBtn.classList.add('from-green-400/80', 'to-green-500/90');
+                        pausedMsg.classList.remove('hidden');
+                    } else {
+                        await fetch(`http://localhost:8080/api/v1/jobs/${jobID}/resume`, { method: 'POST' });
+                        paused = false;
+                        pauseText.textContent = 'Pause';
+                        pauseIcon.textContent = '⏸️';
+                        pauseResumeBtn.classList.remove('from-green-400/80', 'to-green-500/90');
+                        pauseResumeBtn.classList.add('from-yellow-400/80', 'to-yellow-500/90');
+                        pausedMsg.classList.add('hidden');
+                    }
+                });
+            }
+
+            displayResults() {
+                this.resultsBody.innerHTML = '';
+                this.analysisResults.forEach((result, index) => {
+                    const statusColor = result.IsReachable ? (result.StatusCode >= 400 ? 'text-red-400' : 'text-green-400') : 'text-gray-500';
+                    const statusText = result.IsReachable ? `${result.StatusCode} [${result.ContentLength}b]` : 'Unreachable';
+                    const row = document.createElement('tr');
+                    row.dataset.index = index;
+                    row.innerHTML = `
+                        <td class="font-semibold text-white">${result.Subdomain || result.URL}</td>
+                        <td class="${statusColor} font-mono">${statusText}</td>
+                        <td class="${result.Priority === 'High' ? 'priority-high' : 'priority-medium'}">${result.Priority}</td>
+                        <td><button class="preview-report-btn bg-gradient-to-r from-indigo-500/80 to-pink-500/80 hover:from-pink-500/90 hover:to-indigo-500/90 text-white font-bold py-1 px-4 rounded-full shadow transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-pink-300 active:scale-95" data-index="${index}">Preview</button></td>
+                        <td class="space-x-2">
+                            <button class="passive-scan-button bg-blue-600 hover:bg-blue-500 text-xs py-1 px-2 rounded" ${!result.IsReachable ? 'disabled' : ''}>Passive AI</button>
+                            <button class="active-scan-button bg-purple-600 hover:bg-purple-500 text-xs py-1 px-2 rounded" ${!result.IsReachable ? 'disabled' : ''}>Active AI</button>
+                        </td>
+                    `;
+                    this.resultsBody.appendChild(row);
+                });
+            }
+
+            async handleResultClick(e) {
+                if (!e.target.matches('.passive-scan-button, .active-scan-button')) return;
+                
+                const index = e.target.closest('tr').dataset.index;
+                const result = this.analysisResults[index];
+                const aiProvider = this.root.querySelector('.ai-provider').value;
+                const apiKey = this.root.querySelector('.api-key').value;
+
+                if (!apiKey) {
+                    alert('Please enter an AI Provider API Key to perform this scan.');
+                    return;
+                }
+
+                let scanType = e.target.classList.contains('passive-scan-button') ? 'passive' : 'active';
+                showModal(`AI Scan: ${scanType}`, '<div class="loader mx-auto"></div><p>Asking AI...</p>');
+
+                try {
+                    let payload;
+                    if (scanType === 'passive') {
+                        payload = {
+                            target: result.Subdomain || result.URL,
+                            statusCode: result.StatusCode,
+                            headers: result.Headers,
+                            tech: (result.Tags || []).filter(t => t.Type === 'tech').map(t => t.Name),
+                            aiProvider, apiKey
+                        };
+                    } else {
+                        payload = {
+                            target: result.Subdomain || result.URL,
+                            endpoints: result.Endpoints || (result.Findings || []),
+                            aiProvider, apiKey
+                        };
+                    }
+                    
+                    const response = await fetch(`http://localhost:8080/api/v1/ai/${scanType}-scan`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error(await response.text());
+                    const aiResult = await response.json();
+                    showModal(`AI Scan Result: ${scanType}`, aiResult.summary);
+                } catch (error) {
+                    showModal('AI Scan Error', error.message);
+                }
+            }
+
+            async exportResults() {
+                if (!this.analysisResults.length) return alert('No results to export.');
+                if (!this.jobID) return alert('Job ID not found.');
+                const deepcrawl = this.deepCrawlUsed ? 'true' : 'false';
+                const url = `http://localhost:8080/api/v1/subdomains/export/${this.jobID}?deepcrawl=${deepcrawl}`;
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('Export failed');
+                    const blob = await res.blob();
+                    const contentDisp = res.headers.get('Content-Disposition') || '';
+                    let filename = deepcrawl === 'true' ? 'subdomain_reports.zip' : 'reachable_subdomains.txt';
+                    const match = contentDisp.match(/filename=([^;]+)/);
+                    if (match) filename = match[1];
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
+                } catch (e) {
+                    alert('Export failed: ' + e.message);
+                }
+            }
+
+            async exportReachable() {
+                if (!this.analysisResults.length) return alert('No results to export.');
+                if (!this.jobID) return alert('Job ID not found.');
+                const url = `http://localhost:8080/api/v1/subdomains/export/${this.jobID}?deepcrawl=false`;
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error('Export failed');
+                    const blob = await res.blob();
+                    const contentDisp = res.headers.get('Content-Disposition') || '';
+                    let filename = 'reachable_subdomains.txt';
+                    const match = contentDisp.match(/filename=([^;]+)/);
+                    if (match) filename = match[1];
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
+                } catch (e) {
+                    alert('Export failed: ' + e.message);
+                }
+            }
+        }
+
+        const savedView = sessionStorage.getItem('currentView');
+        if (savedView) {
+            showModule(savedView);
+            const instance = new ModuleInstance(savedView, modules[savedView].endpoint);
+            instance.init();
+            const savedResults = JSON.parse(sessionStorage.getItem('currentResults'));
+            if (savedResults) {
+                instance.analysisResults = savedResults;
+                instance.inputSection.classList.add('hidden');
+                instance.resultsSection.classList.remove('hidden');
+                instance.displayResults();
+            }
+        }
+    </script>
+</body>
+</html>
