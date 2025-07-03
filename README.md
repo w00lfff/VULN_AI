@@ -2,7 +2,7 @@
 
 > *_🚧Project under active development_*
 ---
-A modern web based, All in One security Reseacher Toolkit for subdomain reconnaissance and attack surface discovery.
+A AI Powered modern web based, All in One security Reseacher Toolkit for subdomain reconnaissance and attack surface discovery.
 
 ---
 
@@ -15,7 +15,7 @@ A modern web based, All in One security Reseacher Toolkit for subdomain reconnai
   - Human-readable, downloadable reports for each subdomain zip file
   - Real-time progress and results via WebSocket
   - Modern, responsive web UI (no build step required)
-  - AI-powered passive and active scan suggestions (add in future)
+  - Support AI Passive and Custom Prompt.
 
 ---
 
