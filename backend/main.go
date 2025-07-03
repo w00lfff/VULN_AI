@@ -42,6 +42,7 @@ func main() {
 		api.POST("/urls/analyze", modules.HandleURLAnalysis)
 		api.POST("/ai/passive-scan", modules.HandlePassiveAIScan)
 		api.POST("/ai/active-scan", modules.HandleActiveAIScan)
+		api.POST("/ai/custom-scan", modules.HandleCustomAIScan)
 		api.GET("/ws/progress/:jobID", handleProgressUpdates)
 		api.POST("/jobs/:jobID/pause", func(c *gin.Context) {
 			jobID := c.Param("jobID")
