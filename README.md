@@ -68,11 +68,5 @@ OR
   _Add in Future!_
 ---
 
-
-## 📄 License
-
-MIT
-
----
-
 > _VULN_AI is under active development. Contributions and feedback are welcome!_ 
+---
